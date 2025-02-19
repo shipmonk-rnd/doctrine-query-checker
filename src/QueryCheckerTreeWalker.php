@@ -174,17 +174,14 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
     {
         if ($type === null) {
             return 'null';
-
         }
 
         if (is_string($type)) {
             return $type;
-
         }
 
         if ($type instanceof Type) {
             return $type::class;
-
         }
 
         return $type::class . '::' . $type->name;
@@ -198,7 +195,6 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         if ($node->type === PathExpression::TYPE_STATE_FIELD && $node->field !== null) {
             $classMetadata = $this->getMetadataForDqlAlias($node->identificationVariable);
             return $this->getFieldCompatibleTypes($classMetadata, $node->field);
-
         }
 
         if ($node->type === PathExpression::TYPE_SINGLE_VALUED_ASSOCIATION && $node->field !== null) {
@@ -244,33 +240,27 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
 
         if ($parameter === null) {
             return null; // happens when the query is analyzed by PHPStan
-
         }
 
         if ($parameter->typeWasSpecified()) {
             return $this->normalizeType($parameter->getType());
-
         }
 
         if (is_float($parameter->getValue())) {
             return Types::FLOAT; // floats are not inferred by Doctrine\ORM\Query\ParameterTypeInferer::inferType
-
         }
 
         if ($parameter->getValue() instanceof BackedEnum) {
             return $parameter->getValue()::class; // more precise than just inferring the underlying type
-
         }
 
         if (is_object($parameter->getValue()) && $this->isEntity($parameter->getValue())) {
             $classMetadata = $this->getEntityManager()->getClassMetadata($parameter->getValue()::class);
             return $classMetadata->rootEntityName;
-
         }
 
         if ($parameter->getValue() !== null) {
             return $this->normalizeType($parameter->getType());
-
         }
 
         return null;
