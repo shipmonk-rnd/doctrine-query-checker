@@ -6,8 +6,10 @@ use DateTimeImmutable;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Query\Expr;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Psr\Log\LoggerInterface;
 use Ramsey\Uuid\Doctrine\UuidType;
 use ShipMonk\DoctrineQueryChecker\Exception\LogicException;
+use ShipMonk\DoctrineQueryChecker\QueryCheckerTreeWalker;
 use ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity;
 use ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid;
 use ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\TestEntityWithManyFieldTypes;
@@ -307,6 +309,45 @@ class QueryCheckerTreeWalkerTest extends TestCase
             Types::STRING,
             'Parameter "sewu_uuid" is of type "string", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", "uuid"] (because it\'s used in expression with sewu.uuid)',
         ];
+    }
+
+    public function testWillUseLoggerIfAvailable(): void
+    {
+        $logger = self::createMock(LoggerInterface::class);
+        $logger->expects(self::once())
+            ->method('error')
+            ->with(
+                'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected one of: ["boolean"] (because it\'s used in expression with e.booleanField)',
+                self::arrayHasKey('exception'),
+            );
+
+        QueryCheckerTreeWalker::setLogger($logger);
+
+        $this->getEntityManager()->createQueryBuilder()
+            ->select('e')
+            ->from(TestEntityWithManyFieldTypes::class, 'e')
+            ->andWhere('e.booleanField = :value')
+            ->setParameter('value', 123.4)
+            ->getQuery()
+            ->setQueryCache(new NullAdapter())
+            ->getResult();
+
+        QueryCheckerTreeWalker::setLogger(null);
+
+        self::assertException(
+            LogicException::class,
+            'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected one of: ["boolean"] (because it\'s used in expression with e.booleanField)',
+            function (): void {
+                $this->getEntityManager()->createQueryBuilder()
+                    ->select('e')
+                    ->from(TestEntityWithManyFieldTypes::class, 'e')
+                    ->andWhere('e.booleanField = :value')
+                    ->setParameter('value', 123.4)
+                    ->getQuery()
+                    ->setQueryCache(new NullAdapter())
+                    ->getResult();
+            },
+        );
     }
 
 }

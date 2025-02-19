@@ -22,7 +22,10 @@ use Doctrine\ORM\Query\AST\Phase2OptimizableConditional;
 use Doctrine\ORM\Query\AST\SelectStatement;
 use Doctrine\ORM\Query\AST\WhereClause;
 use Doctrine\ORM\Query\TreeWalkerAdapter;
+use Psr\Log\LoggerInterface;
 use ShipMonk\DoctrineQueryChecker\Exception\LogicException;
+use Throwable;
+use WeakReference;
 use function array_map;
 use function class_exists;
 use function implode;
@@ -37,6 +40,19 @@ use function substr;
 
 class QueryCheckerTreeWalker extends TreeWalkerAdapter
 {
+
+    /**
+     * @var WeakReference<LoggerInterface>|null
+     */
+    private static ?WeakReference $logger = null;
+
+    /**
+     * When logger is set, exceptions are logged instead of thrown.
+     */
+    public static function setLogger(?LoggerInterface $logger): void
+    {
+        self::$logger = $logger !== null ? WeakReference::create($logger) : null;
+    }
 
     public function walkSelectStatement(SelectStatement $selectStatement): void
     {
@@ -161,13 +177,15 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
 
         $compatibleTypeNames = array_map(self::typeToName(...), $compatibleTypes);
 
-        throw new LogicException(sprintf(
-            'QueryCheckerTreeWalker: Parameter "%s" is of type "%s", but expected one of: ["%s"] (because it\'s used in expression with %s)',
-            $inputParameter->name,
-            self::typeToName($inputParameterType),
-            implode('", "', $compatibleTypeNames),
-            $pathExpression->field !== null ? "{$pathExpression->identificationVariable}.{$pathExpression->field}" : $pathExpression->identificationVariable,
-        ));
+        $this->processException(
+            new LogicException(sprintf(
+                'QueryCheckerTreeWalker: Parameter "%s" is of type "%s", but expected one of: ["%s"] (because it\'s used in expression with %s)',
+                $inputParameter->name,
+                self::typeToName($inputParameterType),
+                implode('", "', $compatibleTypeNames),
+                $pathExpression->field !== null ? "{$pathExpression->identificationVariable}.{$pathExpression->field}" : $pathExpression->identificationVariable,
+            )),
+        );
     }
 
     private static function typeToName(string|Type|ParameterType|ArrayParameterType|null $type): string
@@ -274,7 +292,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         $realClassName = $markerOffset === false ? $className : substr($className, $markerOffset + strlen($proxyMarker) + 2);
 
         if (!class_exists($realClassName)) {
-            throw new LogicException(sprintf('QueryCheckerTreeWalker: Class "%s" does not exist', $realClassName));
+            return false;
         }
 
         return !$this->getEntityManager()->getMetadataFactory()->isTransient($realClassName);
@@ -310,6 +328,17 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
     protected function getEntityManager(): EntityManagerInterface
     {
         return $this->_getQuery()->getEntityManager();
+    }
+
+    protected function processException(Throwable $e): void
+    {
+        $logger = self::$logger?->get();
+
+        if ($logger === null) {
+            throw $e;
+        }
+
+        $logger->error($e->getMessage(), ['exception' => $e]);
     }
 
 }

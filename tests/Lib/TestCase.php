@@ -26,6 +26,7 @@ abstract class TestCase extends PhpUnitTestCase
     {
         parent::setUp();
         $this->entityManager = null;
+        QueryCheckerTreeWalker::setLogger(null);
     }
 
     /**
