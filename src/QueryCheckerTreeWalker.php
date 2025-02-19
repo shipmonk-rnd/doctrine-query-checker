@@ -175,14 +175,20 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             return;
         }
 
-        $compatibleTypeNames = array_map(self::typeToName(...), $compatibleTypes);
+        if (count($compatibleTypes) === 1) {
+            $expectedDescription = sprintf('"%s"', self::typeToName($compatibleTypes[0]));
+
+        } else {
+            $compatibleTypeNames = array_map(self::typeToName(...), $compatibleTypes);
+            $expectedDescription = sprintf('one of: ["%s"]', implode('", "', $compatibleTypeNames));
+        }
 
         $this->processException(
             new LogicException(sprintf(
-                'QueryCheckerTreeWalker: Parameter "%s" is of type "%s", but expected one of: ["%s"] (because it\'s used in expression with %s)',
+                'QueryCheckerTreeWalker: Parameter "%s" is of type "%s", but expected %s (because it\'s used in expression with %s)',
                 $inputParameter->name,
                 self::typeToName($inputParameterType),
-                implode('", "', $compatibleTypeNames),
+                $expectedDescription,
                 $pathExpression->field !== null ? "{$pathExpression->identificationVariable}.{$pathExpression->field}" : $pathExpression->identificationVariable,
             )),
         );

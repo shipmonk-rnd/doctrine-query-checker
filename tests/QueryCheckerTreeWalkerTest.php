@@ -27,7 +27,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
     {
         self::assertException(
             LogicException::class,
-            'QueryCheckerTreeWalker: Parameter "stringField" is of type "float", but expected one of: ["string"] (because it\'s used in expression with e.stringField)',
+            'QueryCheckerTreeWalker: Parameter "stringField" is of type "float", but expected "string" (because it\'s used in expression with e.stringField)',
             function () use ($expr): void {
                 $this->getEntityManager()->createQueryBuilder()
                     ->select('e')
@@ -42,7 +42,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
 
         self::assertException(
             LogicException::class,
-            'QueryCheckerTreeWalker: Parameter "stringField" is of type "float", but expected one of: ["string"] (because it\'s used in expression with e.stringField)',
+            'QueryCheckerTreeWalker: Parameter "stringField" is of type "float", but expected "string" (because it\'s used in expression with e.stringField)',
             function () use ($expr): void {
                 $this->getEntityManager()->createQueryBuilder()
                     ->select('e')
@@ -201,42 +201,42 @@ class QueryCheckerTreeWalkerTest extends TestCase
             'e.stringField',
             123,
             null,
-            'Parameter "e_stringField" is of type "integer", but expected one of: ["string"] (because it\'s used in expression with e.stringField)',
+            'Parameter "e_stringField" is of type "integer", but expected "string" (because it\'s used in expression with e.stringField)',
         ];
 
         yield [
             'e.stringField',
             123.4,
             null,
-            'Parameter "e_stringField" is of type "float", but expected one of: ["string"] (because it\'s used in expression with e.stringField)',
+            'Parameter "e_stringField" is of type "float", but expected "string" (because it\'s used in expression with e.stringField)',
         ];
 
         yield [
             'e.stringField',
             TestEntityWithManyFieldTypesStringEnum::A,
             null,
-            'Parameter "e_stringField" is of type "ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum", but expected one of: ["string"] (because it\'s used in expression with e.stringField)',
+            'Parameter "e_stringField" is of type "ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum", but expected "string" (because it\'s used in expression with e.stringField)',
         ];
 
         yield [
             'e.textField',
             123,
             null,
-            'Parameter "e_textField" is of type "integer", but expected one of: ["string"] (because it\'s used in expression with e.textField)',
+            'Parameter "e_textField" is of type "integer", but expected "string" (because it\'s used in expression with e.textField)',
         ];
 
         yield [
             'e.textField',
             123.4,
             null,
-            'Parameter "e_textField" is of type "float", but expected one of: ["string"] (because it\'s used in expression with e.textField)',
+            'Parameter "e_textField" is of type "float", but expected "string" (because it\'s used in expression with e.textField)',
         ];
 
         yield [
             'e.booleanField',
             'ABC',
             null,
-            'Parameter "e_booleanField" is of type "string", but expected one of: ["boolean"] (because it\'s used in expression with e.booleanField)',
+            'Parameter "e_booleanField" is of type "string", but expected "boolean" (because it\'s used in expression with e.booleanField)',
         ];
 
         yield [
@@ -250,7 +250,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
             'e.dateTimeImmutableField',
             '2021-01-01',
             Types::STRING,
-            'Parameter "e_dateTimeImmutableField" is of type "string", but expected one of: ["datetime_immutable"] (because it\'s used in expression with e.dateTimeImmutableField)',
+            'Parameter "e_dateTimeImmutableField" is of type "string", but expected "datetime_immutable" (because it\'s used in expression with e.dateTimeImmutableField)',
         ];
 
         $simpleTestEntityWithUuid = new SimpleTestEntityWithUuid();
@@ -317,7 +317,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
         $logger->expects(self::once())
             ->method('error')
             ->with(
-                'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected one of: ["boolean"] (because it\'s used in expression with e.booleanField)',
+                'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected "boolean" (because it\'s used in expression with e.booleanField)',
                 self::arrayHasKey('exception'),
             );
 
@@ -336,7 +336,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
 
         self::assertException(
             LogicException::class,
-            'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected one of: ["boolean"] (because it\'s used in expression with e.booleanField)',
+            'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected "boolean" (because it\'s used in expression with e.booleanField)',
             function (): void {
                 $this->getEntityManager()->createQueryBuilder()
                     ->select('e')
