@@ -164,6 +164,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         }
 
         $compatibleTypes = $this->getPathExpressionCompatibleTypes($pathExpression);
+        $compatibleTypes = array_map($this->normalizeType(...), $compatibleTypes);
         $compatibleTypesExtended = $compatibleTypes;
 
         foreach ($compatibleTypes as $compatibleType) {
@@ -228,7 +229,6 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             $targetEntityMetadata = $this->getEntityManager()->getClassMetadata($targetEntityName);
             $targetEntityIdentifier = $targetEntityMetadata->getSingleIdentifierFieldName();
             return $this->getFieldCompatibleTypes($targetEntityMetadata, $targetEntityIdentifier);
-
         }
 
         throw new LogicException('QueryCheckerTreeWalker: Unknown path expression type');
@@ -256,7 +256,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
 
         $types[] = $fieldMapping->type;
 
-        return array_map($this->normalizeType(...), $types);
+        return $types;
     }
 
     protected function getInputParameterType(InputParameter $node): string|Type|ParameterType|ArrayParameterType|null
