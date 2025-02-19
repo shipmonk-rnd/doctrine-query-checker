@@ -28,6 +28,7 @@ use Throwable;
 use WeakReference;
 use function array_map;
 use function class_exists;
+use function count;
 use function implode;
 use function in_array;
 use function is_float;
@@ -81,6 +82,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             foreach ($node->conditionalTerms as $term) {
                 $this->processConditionalTerm($term);
             }
+
         } else {
             $this->processConditionalTerm($node);
         }
@@ -92,6 +94,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             foreach ($node->conditionalFactors as $factor) {
                 $this->processConditionalFactor($factor);
             }
+
         } elseif ($node instanceof ConditionalFactor || $node instanceof ConditionalPrimary) {
             $this->processConditionalFactor($node);
 
@@ -116,10 +119,8 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             $this->processConditionalExpression($node->conditionalExpression);
         }
 
-        if ($node->simpleConditionalExpression !== null) {
-            if ($node->simpleConditionalExpression instanceof ComparisonExpression) {
-                $this->processComparisonExpression($node->simpleConditionalExpression);
-            }
+        if ($node->simpleConditionalExpression instanceof ComparisonExpression) {
+            $this->processComparisonExpression($node->simpleConditionalExpression);
         }
     }
 
@@ -171,7 +172,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             }
         }
 
-        if (in_array($inputParameterType, $compatibleTypesExtended, true)) {
+        if (in_array($inputParameterType, $compatibleTypesExtended, strict: true)) {
             return;
         }
 
