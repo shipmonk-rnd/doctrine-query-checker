@@ -21,6 +21,7 @@ use Doctrine\ORM\Query\AST\PathExpression;
 use Doctrine\ORM\Query\AST\Phase2OptimizableConditional;
 use Doctrine\ORM\Query\AST\SelectStatement;
 use Doctrine\ORM\Query\AST\WhereClause;
+use Doctrine\ORM\Query\Parameter;
 use Doctrine\ORM\Query\TreeWalkerAdapter;
 use Psr\Log\LoggerInterface;
 use ShipMonk\DoctrineQueryChecker\Exception\LogicException;
@@ -157,9 +158,15 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         InputParameter $inputParameter,
     ): void
     {
-        $inputParameterType = $this->getInputParameterType($inputParameter);
+        $parameter = $this->_getQuery()->getParameter($inputParameter->name);
 
-        if ($inputParameterType === null) {
+        if ($parameter === null) {
+            return; // happens when the query is analyzed by PHPStan
+        }
+
+        $parameterType = $this->getParameterType($parameter);
+
+        if ($parameterType === null) {
             return;
         }
 
@@ -173,27 +180,26 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             }
         }
 
-        if (in_array($inputParameterType, $compatibleTypesExtended, strict: true)) {
+        if (in_array($parameterType, $compatibleTypesExtended, strict: true)) {
             return;
         }
 
-        if (count($compatibleTypes) === 1) {
-            $expectedDescription = sprintf('"%s"', self::typeToName($compatibleTypes[0]));
+        $parameterTypeName = self::typeToName($parameterType);
 
-        } else {
-            $compatibleTypeNames = array_map(self::typeToName(...), $compatibleTypes);
-            $expectedDescription = sprintf('one of: ["%s"]', implode('", "', $compatibleTypeNames));
-        }
+        $expressionName = $pathExpression->field !== null
+            ? "{$pathExpression->identificationVariable}.{$pathExpression->field}"
+            : $pathExpression->identificationVariable;
 
-        $this->processException(
-            new LogicException(sprintf(
-                'QueryCheckerTreeWalker: Parameter "%s" is of type "%s", but expected %s (because it\'s used in expression with %s)',
-                $inputParameter->name,
-                self::typeToName($inputParameterType),
-                $expectedDescription,
-                $pathExpression->field !== null ? "{$pathExpression->identificationVariable}.{$pathExpression->field}" : $pathExpression->identificationVariable,
-            )),
-        );
+        $expectedTypeName = count($compatibleTypes) === 1
+            ? sprintf("'%s'", self::typeToName($compatibleTypes[0]))
+            : sprintf("one of: ['%s']", implode("', '", array_map(self::typeToName(...), $compatibleTypes)));
+
+        $message = $parameter->typeWasSpecified()
+            ? "Parameter '{$inputParameter->name}' is using '{$parameterTypeName}' type in 3rd argument of setParameter()"
+            : "Parameter '{$inputParameter->name}' has no type specified in 3rd argument of setParameter(). Thus it is inferred as '{$parameterTypeName}'";
+
+        $message .= ", but it is compared with '{$expressionName}' which can only be compared with {$expectedTypeName}.";
+        $this->processException(new LogicException("QueryCheckerTreeWalker: $message"));
     }
 
     private static function typeToName(string|Type|ParameterType|ArrayParameterType|null $type): string
@@ -259,14 +265,8 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         return $types;
     }
 
-    protected function getInputParameterType(InputParameter $node): string|Type|ParameterType|ArrayParameterType|null
+    protected function getParameterType(Parameter $parameter): string|Type|ParameterType|ArrayParameterType|null
     {
-        $parameter = $this->_getQuery()->getParameter($node->name);
-
-        if ($parameter === null) {
-            return null; // happens when the query is analyzed by PHPStan
-        }
-
         if ($parameter->typeWasSpecified()) {
             return $this->normalizeType($parameter->getType());
         }

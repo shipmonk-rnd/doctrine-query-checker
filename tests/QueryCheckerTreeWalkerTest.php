@@ -27,7 +27,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
     {
         self::assertException(
             LogicException::class,
-            'QueryCheckerTreeWalker: Parameter "stringField" is of type "float", but expected "string" (because it\'s used in expression with e.stringField)',
+            'QueryCheckerTreeWalker: Parameter \'stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
             function () use ($expr): void {
                 $this->getEntityManager()->createQueryBuilder()
                     ->select('e')
@@ -42,7 +42,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
 
         self::assertException(
             LogicException::class,
-            'QueryCheckerTreeWalker: Parameter "stringField" is of type "float", but expected "string" (because it\'s used in expression with e.stringField)',
+            'QueryCheckerTreeWalker: Parameter \'stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
             function () use ($expr): void {
                 $this->getEntityManager()->createQueryBuilder()
                     ->select('e')
@@ -201,56 +201,56 @@ class QueryCheckerTreeWalkerTest extends TestCase
             'e.stringField',
             123,
             null,
-            'Parameter "e_stringField" is of type "integer", but expected "string" (because it\'s used in expression with e.stringField)',
+            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
         ];
 
         yield [
             'e.stringField',
             123.4,
             null,
-            'Parameter "e_stringField" is of type "float", but expected "string" (because it\'s used in expression with e.stringField)',
+            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
         ];
 
         yield [
             'e.stringField',
             TestEntityWithManyFieldTypesStringEnum::A,
             null,
-            'Parameter "e_stringField" is of type "ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum", but expected "string" (because it\'s used in expression with e.stringField)',
+            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
         ];
 
         yield [
             'e.textField',
             123,
             null,
-            'Parameter "e_textField" is of type "integer", but expected "string" (because it\'s used in expression with e.textField)',
+            'Parameter \'e_textField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'e.textField\' which can only be compared with \'string\'.',
         ];
 
         yield [
             'e.textField',
             123.4,
             null,
-            'Parameter "e_textField" is of type "float", but expected "string" (because it\'s used in expression with e.textField)',
+            'Parameter \'e_textField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.textField\' which can only be compared with \'string\'.',
         ];
 
         yield [
             'e.booleanField',
             'ABC',
             null,
-            'Parameter "e_booleanField" is of type "string", but expected "boolean" (because it\'s used in expression with e.booleanField)',
+            'Parameter \'e_booleanField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'string\', but it is compared with \'e.booleanField\' which can only be compared with \'boolean\'.',
         ];
 
         yield [
             'e.stringEnumField',
             TestEntityWithManyFieldTypesIntEnum::A,
             null,
-            'Parameter "e_stringEnumField" is of type "ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesIntEnum", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum", "string"] (because it\'s used in expression with e.stringEnumField)',
+            'Parameter \'e_stringEnumField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesIntEnum\', but it is compared with \'e.stringEnumField\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum\', \'string\'].',
         ];
 
         yield [
             'e.dateTimeImmutableField',
             '2021-01-01',
             Types::STRING,
-            'Parameter "e_dateTimeImmutableField" is of type "string", but expected "datetime_immutable" (because it\'s used in expression with e.dateTimeImmutableField)',
+            'Parameter \'e_dateTimeImmutableField\' is using \'string\' type in 3rd argument of setParameter(), but it is compared with \'e.dateTimeImmutableField\' which can only be compared with \'datetime_immutable\'.',
         ];
 
         $simpleTestEntityWithUuid = new SimpleTestEntityWithUuid();
@@ -258,56 +258,56 @@ class QueryCheckerTreeWalkerTest extends TestCase
             'e.simpleTestEntity',
             $simpleTestEntityWithUuid,
             null,
-            'Parameter "e_simpleTestEntity" is of type "ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity", "integer"] (because it\'s used in expression with e.simpleTestEntity)',
+            'Parameter \'e_simpleTestEntity\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', but it is compared with \'e.simpleTestEntity\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity\', \'integer\'].',
         ];
 
         yield [
             'se.id',
             $simpleTestEntityWithUuid,
             null,
-            'Parameter "se_id" is of type "ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity", "integer"] (because it\'s used in expression with se.id)',
+            'Parameter \'se_id\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', but it is compared with \'se.id\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity\', \'integer\'].',
         ];
 
         yield [
             'e.simpleTestEntityWithUuid',
             $simpleTestEntityWithUuid->getUuid(),
             null,
-            'Parameter "e_simpleTestEntityWithUuid" is of type "string", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", "uuid"] (because it\'s used in expression with e.simpleTestEntityWithUuid)',
+            'Parameter \'e_simpleTestEntityWithUuid\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'string\', but it is compared with \'e.simpleTestEntityWithUuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
 
         yield [
             'e.simpleTestEntityWithUuid',
             $simpleTestEntityWithUuid->getUuid(),
             Types::STRING,
-            'Parameter "e_simpleTestEntityWithUuid" is of type "string", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", "uuid"] (because it\'s used in expression with e.simpleTestEntityWithUuid)',
+            'Parameter \'e_simpleTestEntityWithUuid\' is using \'string\' type in 3rd argument of setParameter(), but it is compared with \'e.simpleTestEntityWithUuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
 
         yield [
             'sewu',
             $simpleTestEntityWithUuid->getUuid(),
             null,
-            'Parameter "sewu" is of type "string", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", "uuid"] (because it\'s used in expression with sewu.uuid)',
+            'Parameter \'sewu\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'string\', but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
 
         yield [
             'sewu',
             $simpleTestEntityWithUuid->getUuid(),
             Types::STRING,
-            'Parameter "sewu" is of type "string", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", "uuid"] (because it\'s used in expression with sewu.uuid)',
+            'Parameter \'sewu\' is using \'string\' type in 3rd argument of setParameter(), but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
 
         yield [
             'sewu.uuid',
             $simpleTestEntityWithUuid->getUuid(),
             null,
-            'Parameter "sewu_uuid" is of type "string", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", "uuid"] (because it\'s used in expression with sewu.uuid)',
+            'Parameter \'sewu_uuid\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'string\', but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
 
         yield [
             'sewu.uuid',
             $simpleTestEntityWithUuid->getUuid(),
             Types::STRING,
-            'Parameter "sewu_uuid" is of type "string", but expected one of: ["ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid", "uuid"] (because it\'s used in expression with sewu.uuid)',
+            'Parameter \'sewu_uuid\' is using \'string\' type in 3rd argument of setParameter(), but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
     }
 
@@ -317,7 +317,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
         $logger->expects(self::once())
             ->method('error')
             ->with(
-                'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected "boolean" (because it\'s used in expression with e.booleanField)',
+                'QueryCheckerTreeWalker: Parameter \'value\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.booleanField\' which can only be compared with \'boolean\'.',
                 self::arrayHasKey('exception'),
             );
 
@@ -336,7 +336,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
 
         self::assertException(
             LogicException::class,
-            'QueryCheckerTreeWalker: Parameter "value" is of type "float", but expected "boolean" (because it\'s used in expression with e.booleanField)',
+            'QueryCheckerTreeWalker: Parameter \'value\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.booleanField\' which can only be compared with \'boolean\'.',
             function (): void {
                 $this->getEntityManager()->createQueryBuilder()
                     ->select('e')
