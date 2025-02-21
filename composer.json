@@ -1,0 +1,66 @@
+{
+    "name": "shipmonk/doctrine-query-checker",
+    "description": "Doctrine Query AST validator",
+    "license": [
+        "MIT"
+    ],
+    "require": {
+        "php": "^8.1",
+        "doctrine/dbal": "^4.0",
+        "doctrine/orm": "^3.0",
+        "psr/log": "^1.0 || ^2.0 || ^3.0"
+    },
+    "require-dev": {
+        "editorconfig-checker/editorconfig-checker": "^10.6.0",
+        "ergebnis/composer-normalize": "^2.42.0",
+        "nette/utils": "^4.0",
+        "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpstan/phpstan-strict-rules": "^2.0",
+        "phpunit/phpunit": "^10.5",
+        "ramsey/uuid": "^4.7.6",
+        "ramsey/uuid-doctrine": "^2.1.0",
+        "shipmonk/composer-dependency-analyser": "^1.8",
+        "shipmonk/name-collision-detector": "^2.1",
+        "shipmonk/phpstan-rules": "^4.1",
+        "slevomat/coding-standard": "^8.15",
+        "symfony/cache": "^6.4 || ^7.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "ShipMonk\\DoctrineQueryChecker\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "ShipMonkTests\\DoctrineQueryChecker\\": "tests/"
+        }
+    },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true,
+            "ergebnis/composer-normalize": true
+        },
+        "sort-packages": true
+    },
+    "scripts": {
+        "check": [
+            "@check:composer",
+            "@check:ec",
+            "@check:cs",
+            "@check:types",
+            "@check:tests",
+            "@check:dependencies"
+        ],
+        "check:composer": [
+            "composer normalize --dry-run --no-check-lock --no-update-lock",
+            "composer validate --strict"
+        ],
+        "check:cs": "phpcs",
+        "check:dependencies": "composer-dependency-analyser",
+        "check:ec": "ec src tests",
+        "check:tests": "phpunit tests",
+        "check:types": "phpstan analyse -vvv",
+        "fix:cs": "phpcbf"
+    }
+}
