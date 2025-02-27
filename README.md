@@ -5,7 +5,7 @@ Doctrine Query Tree Walker that perform additional checks on the query AST in ad
 Currently it checks that the types of the parameters passed to the query are correct. For example the following will result in exception:
 
 ```php
-// throws: Parameter 'created_at' has no type specified in 3rd argument of setParameter(). Thus it is inferred as 'string', but it is compared with 'u.createdA' which can only be compared with 'datetime_immutable'.
+// throws: Parameter 'created_at' has no type specified in 3rd argument of setParameter(). Thus it is inferred as 'string', but it is compared with 'u.createdAt' which can only be compared with 'datetime_immutable'.
 $this->entityManager->createQueryBuilder()
     ->select('u')
     ->from(User::class, 'u')
