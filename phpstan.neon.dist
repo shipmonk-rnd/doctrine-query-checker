@@ -23,6 +23,9 @@ parameters:
         checkedExceptionClasses:
             - ShipMonk\DoctrineQueryChecker\Exception\RuntimeException
 
+    featureToggles:
+        internalTag: false
+
     ignoreErrors:
         -
             identifier: 'property.onlyWritten'
