@@ -306,7 +306,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
     }
 
     protected function normalizeType(
-        string|Type|ParameterType|ArrayParameterType $type
+        string|Type|ParameterType|ArrayParameterType $type,
     ): string|Type|ParameterType|ArrayParameterType
     {
         return match ($type) {
