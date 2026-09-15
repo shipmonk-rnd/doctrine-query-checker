@@ -16,12 +16,16 @@ use Doctrine\ORM\Query\AST\ConditionalFactor;
 use Doctrine\ORM\Query\AST\ConditionalPrimary;
 use Doctrine\ORM\Query\AST\ConditionalTerm;
 use Doctrine\ORM\Query\AST\HavingClause;
+use Doctrine\ORM\Query\AST\InListExpression;
 use Doctrine\ORM\Query\AST\InputParameter;
+use Doctrine\ORM\Query\AST\InSubselectExpression;
 use Doctrine\ORM\Query\AST\PathExpression;
 use Doctrine\ORM\Query\AST\Phase2OptimizableConditional;
 use Doctrine\ORM\Query\AST\SelectStatement;
+use Doctrine\ORM\Query\AST\Subselect;
 use Doctrine\ORM\Query\AST\WhereClause;
 use Doctrine\ORM\Query\Parameter;
+use Doctrine\ORM\Query\ParameterTypeInferer;
 use Doctrine\ORM\Query\TreeWalkerAdapter;
 use Psr\Log\LoggerInterface;
 use ShipMonk\DoctrineQueryChecker\Exception\LogicException;
@@ -32,9 +36,12 @@ use function class_exists;
 use function count;
 use function implode;
 use function in_array;
+use function is_array;
 use function is_float;
+use function is_int;
 use function is_object;
 use function is_string;
+use function reset;
 use function sprintf;
 use function strlen;
 use function strrpos;
@@ -123,6 +130,38 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         if ($node->simpleConditionalExpression instanceof ComparisonExpression) {
             $this->processComparisonExpression($node->simpleConditionalExpression);
         }
+
+        if ($node->simpleConditionalExpression instanceof InListExpression) {
+            $this->processInListExpression($node->simpleConditionalExpression);
+        }
+
+        if ($node->simpleConditionalExpression instanceof InSubselectExpression) {
+            $this->processSubselect($node->simpleConditionalExpression->subselect);
+        }
+    }
+
+    protected function processInListExpression(InListExpression $node): void
+    {
+        if (!$node->expression->simpleArithmeticExpression instanceof PathExpression) {
+            return;
+        }
+
+        foreach ($node->literals as $literal) {
+            if ($literal instanceof InputParameter) {
+                $this->verifyInputParameterType($node->expression->simpleArithmeticExpression, $literal);
+            }
+        }
+    }
+
+    protected function processSubselect(Subselect $subselect): void
+    {
+        if ($subselect->whereClause !== null) {
+            $this->processWhereClause($subselect->whereClause);
+        }
+
+        if ($subselect->havingClause !== null) {
+            $this->processHavingClause($subselect->havingClause);
+        }
     }
 
     protected function processComparisonExpression(ComparisonExpression $node): void
@@ -143,13 +182,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         }
 
         if ($a->subselect !== null) {
-            if ($a->subselect->whereClause !== null) {
-                $this->processWhereClause($a->subselect->whereClause);
-            }
-
-            if ($a->subselect->havingClause !== null) {
-                $this->processHavingClause($a->subselect->havingClause);
-            }
+            $this->processSubselect($a->subselect);
         }
     }
 
@@ -271,24 +304,42 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
             return $this->normalizeType($parameter->getType());
         }
 
-        if (is_float($parameter->getValue())) {
+        $value = $parameter->getValue();
+
+        if (is_array($value)) {
+            // Doctrine infers the type of a list parameter from its first element, so we check the same element
+            $value = $value === [] ? null : reset($value);
+        }
+
+        return $this->getValueType($value);
+    }
+
+    protected function getValueType(mixed $value): string|Type|ParameterType|ArrayParameterType|null
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        if (is_float($value)) {
             return Types::FLOAT; // floats are not inferred by Doctrine\ORM\Query\ParameterTypeInferer::inferType
         }
 
-        if ($parameter->getValue() instanceof BackedEnum) {
-            return $parameter->getValue()::class; // more precise than just inferring the underlying type
+        if ($value instanceof BackedEnum) {
+            return $value::class; // more precise than just inferring the underlying type
         }
 
-        if (is_object($parameter->getValue()) && $this->isEntity($parameter->getValue())) {
-            $classMetadata = $this->getEntityManager()->getClassMetadata($parameter->getValue()::class);
+        if (is_object($value) && $this->isEntity($value)) {
+            $classMetadata = $this->getEntityManager()->getClassMetadata($value::class);
             return $classMetadata->rootEntityName;
         }
 
-        if ($parameter->getValue() !== null) {
-            return $this->normalizeType($parameter->getType());
+        $inferredType = ParameterTypeInferer::inferType($value);
+
+        if (is_int($inferredType)) {
+            return null; // legacy DBAL 3 constant, DBAL 4 never returns it
         }
 
-        return null;
+        return $this->normalizeType($inferredType);
     }
 
     protected function isEntity(object $object): bool
@@ -311,8 +362,10 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
     {
         return match ($type) {
             ParameterType::BOOLEAN => Types::BOOLEAN,
-            ParameterType::INTEGER => Types::INTEGER,
-            ParameterType::STRING => Types::STRING,
+            ParameterType::INTEGER, ArrayParameterType::INTEGER => Types::INTEGER,
+            ParameterType::STRING, ArrayParameterType::STRING => Types::STRING,
+            ParameterType::ASCII, ArrayParameterType::ASCII => Types::ASCII_STRING,
+            ParameterType::BINARY, ArrayParameterType::BINARY => Types::BINARY,
             Types::BIGINT => Types::INTEGER,
             Types::TEXT => Types::STRING,
             default => $type,
