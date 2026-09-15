@@ -16,6 +16,8 @@ use PHPUnit\Framework\TestCase as PhpUnitTestCase;
 use Ramsey\Uuid\Doctrine\UuidType;
 use ShipMonk\DoctrineQueryChecker\QueryCheckerTreeWalker;
 use Throwable;
+use function method_exists;
+use const PHP_VERSION_ID;
 
 abstract class TestCase extends PhpUnitTestCase
 {
@@ -74,6 +76,11 @@ abstract class TestCase extends PhpUnitTestCase
         $config = ORMSetup::createAttributeMetadataConfiguration([__DIR__ . '/../Fixture'], isDevMode: true, proxyDir: __DIR__ . '/../../cache/proxies');
         $config->setNamingStrategy(new UnderscoreNamingStrategy());
         $config->setDefaultQueryHint(Query::HINT_CUSTOM_TREE_WALKERS, [QueryCheckerTreeWalker::class]);
+
+        // symfony/var-exporter 8 has no LazyGhost anymore; prefer-lowest installs doctrine/orm 3.0 without this method
+        if (PHP_VERSION_ID >= 80_400 && method_exists($config, 'enableNativeLazyObjects')) { // @phpstan-ignore function.alreadyNarrowedType
+            $config->enableNativeLazyObjects(true);
+        }
 
         $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true], $config);
         $entityManager = new EntityManager($connection, $config);
