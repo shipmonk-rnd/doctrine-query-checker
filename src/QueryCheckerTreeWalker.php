@@ -5,6 +5,7 @@ namespace ShipMonk\DoctrineQueryChecker;
 use BackedEnum;
 use Doctrine\DBAL\ArrayParameterType;
 use Doctrine\DBAL\ParameterType;
+use Doctrine\DBAL\Types\SimpleArrayType;
 use Doctrine\DBAL\Types\Type;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\EntityManagerInterface;
@@ -43,6 +44,8 @@ use function is_object;
 use function is_string;
 use function reset;
 use function sprintf;
+use function str_contains;
+use function str_starts_with;
 use function strlen;
 use function strrpos;
 use function substr;
@@ -147,7 +150,7 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         }
 
         foreach ($node->literals as $literal) {
-            if ($literal instanceof InputParameter) {
+            if ($literal instanceof InputParameter && $this->verifyListParameterUsage($literal, listAllowed: true)) {
                 $this->verifyInputParameterType($node->expression->simpleArithmeticExpression, $literal);
             }
         }
@@ -177,13 +180,79 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         ArithmeticExpression $b,
     ): void
     {
-        if ($a->simpleArithmeticExpression instanceof PathExpression && $b->simpleArithmeticExpression instanceof InputParameter) {
+        if (
+            $a->simpleArithmeticExpression instanceof PathExpression
+            && $b->simpleArithmeticExpression instanceof InputParameter
+            && $this->verifyListParameterUsage($b->simpleArithmeticExpression, listAllowed: false)
+        ) {
             $this->verifyInputParameterType($a->simpleArithmeticExpression, $b->simpleArithmeticExpression);
         }
 
         if ($a->subselect !== null) {
             $this->processSubselect($a->subselect);
         }
+    }
+
+    /**
+     * @return bool False when the usage is wrong. The type check has no meaning then.
+     */
+    protected function verifyListParameterUsage(
+        InputParameter $inputParameter,
+        bool $listAllowed,
+    ): bool
+    {
+        $parameter = $this->_getQuery()->getParameter($inputParameter->name);
+
+        if ($parameter === null) {
+            return true; // happens when the query is analyzed by PHPStan
+        }
+
+        $type = $parameter->getType();
+
+        if ($type instanceof ArrayParameterType) {
+            if ($listAllowed) {
+                return true;
+            }
+
+            $message = $parameter->typeWasSpecified()
+                ? "Parameter '{$inputParameter->name}' is using ArrayParameterType in 3rd argument of setParameter()"
+                : "Parameter '{$inputParameter->name}' has an array value and no type specified in 3rd argument of setParameter(). Thus it is inferred as a list";
+
+            $message .= ', but it is used outside of IN (...). Doctrine expands a list to one placeholder for each element, which is valid only inside IN (...).';
+            $this->processException(new LogicException("QueryCheckerTreeWalker: $message"));
+            return false;
+        }
+
+        if (is_array($parameter->getValue()) && $this->isScalarType($type)) {
+            $typeName = self::typeToName($this->normalizeType($type));
+            $message = "Parameter '{$inputParameter->name}' has an array value, but it is using '{$typeName}' type in 3rd argument of setParameter(). Doctrine binds the whole array as one '{$typeName}' value. Use ArrayParameterType to pass a list.";
+            $this->processException(new LogicException("QueryCheckerTreeWalker: $message"));
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Custom types are not scalar here, because they can accept an array (e.g. PostgreSQL array types).
+     *
+     * @phpstan-assert-if-true ParameterType|string $type
+     */
+    protected function isScalarType(mixed $type): bool
+    {
+        if ($type instanceof ParameterType) {
+            return true;
+        }
+
+        if (!is_string($type) || !Type::hasType($type)) {
+            return false;
+        }
+
+        $dbalType = Type::getType($type);
+
+        return str_starts_with($dbalType::class, 'Doctrine\\DBAL\\Types\\')
+            && !str_contains($dbalType::class, 'Json') // JsonObjectType and JsonbType do not exist in DBAL 4.0
+            && !$dbalType instanceof SimpleArrayType;
     }
 
     protected function verifyInputParameterType(
@@ -307,7 +376,8 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         $value = $parameter->getValue();
 
         if (is_array($value)) {
-            // Doctrine infers the type of a list parameter from its first element, so we check the same element
+            // Doctrine binds every element with the type of the first one, so we check that element.
+            // We infer its type as a scalar, which is more precise than the ArrayParameterType that Doctrine infers.
             $value = $value === [] ? null : reset($value);
         }
 

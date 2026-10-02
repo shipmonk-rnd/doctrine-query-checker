@@ -4,6 +4,7 @@ namespace ShipMonkTests\DoctrineQueryChecker;
 
 use DateTimeImmutable;
 use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Query\Expr;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -521,6 +522,66 @@ class QueryCheckerTreeWalkerTest extends TestCase
                     ->getResult();
             },
         );
+    }
+
+    #[DataProvider('provideWrongListParameterUsageData')]
+    public function testWrongListParameterUsage(
+        string $condition,
+        mixed $parameterValue,
+        ArrayParameterType|ParameterType|string|null $parameterType,
+        string $exceptionMessage,
+    ): void
+    {
+        self::assertException(
+            LogicException::class,
+            "QueryCheckerTreeWalker: $exceptionMessage",
+            function () use ($condition, $parameterValue, $parameterType): void {
+                $this->getEntityManager()->createQueryBuilder()
+                    ->select('e')
+                    ->from(TestEntityWithManyFieldTypes::class, 'e')
+                    ->andWhere($condition)
+                    ->setParameter('param', $parameterValue, $parameterType)
+                    ->getQuery()
+                    ->setQueryCache(new NullAdapter())
+                    ->getResult();
+            },
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, mixed, ArrayParameterType|ParameterType|string|null, string}>
+     */
+    public static function provideWrongListParameterUsageData(): iterable
+    {
+        $inferredListOutsideIn = 'Parameter \'param\' has an array value and no type specified in 3rd argument of setParameter(). Thus it is inferred as a list, but it is used outside of IN (...). Doctrine expands a list to one placeholder for each element, which is valid only inside IN (...).';
+        $explicitListOutsideIn = 'Parameter \'param\' is using ArrayParameterType in 3rd argument of setParameter(), but it is used outside of IN (...). Doctrine expands a list to one placeholder for each element, which is valid only inside IN (...).';
+        $arrayWithScalarType = 'Parameter \'param\' has an array value, but it is using \'integer\' type in 3rd argument of setParameter(). Doctrine binds the whole array as one \'integer\' value. Use ArrayParameterType to pass a list.';
+
+        yield 'one-element list in comparison' => ['e.id = :param', [1], null, $inferredListOutsideIn];
+        yield 'list in comparison' => ['e.id = :param', [1, 2], null, $inferredListOutsideIn];
+        yield 'list in comparison (left side)' => [':param <> e.id', [1, 2], null, $inferredListOutsideIn];
+        yield 'untyped array compared with json field' => ['e.jsonField = :param', ['a' => 1], null, $inferredListOutsideIn];
+        yield 'explicit list in comparison' => ['e.id = :param', [1], ArrayParameterType::INTEGER, $explicitListOutsideIn];
+
+        yield 'array with Types::INTEGER in IN' => ['e.id IN (:param)', [1, 2], Types::INTEGER, $arrayWithScalarType];
+        yield 'array with ParameterType::INTEGER in IN' => ['e.id IN (:param)', [1, 2], ParameterType::INTEGER, $arrayWithScalarType];
+        yield 'array with Types::BIGINT in IN' => ['e.bigintField IN (:param)', [1, 2], Types::BIGINT, $arrayWithScalarType];
+        yield 'array with Types::INTEGER in comparison' => ['e.id = :param', [1], Types::INTEGER, $arrayWithScalarType];
+    }
+
+    public function testArrayValueWithArrayAcceptingTypeInsideInList(): void
+    {
+        $result = $this->getEntityManager()->createQueryBuilder()
+            ->select('e')
+            ->from(TestEntityWithManyFieldTypes::class, 'e')
+            ->andWhere('e.jsonField IN (:first, :second)')
+            ->setParameter('first', ['a' => 1], Types::JSON)
+            ->setParameter('second', ['a' => 2], Types::JSON)
+            ->getQuery()
+            ->setQueryCache(new NullAdapter())
+            ->getResult();
+
+        self::assertSame([], $result);
     }
 
     public function testWillUseLoggerIfAvailable(): void
