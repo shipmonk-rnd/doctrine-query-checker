@@ -348,6 +348,11 @@ class QueryCheckerTreeWalkerTest extends TestCase
         yield ['e.stringField', ['ABC', 'DEF']];
         yield ['e.stringField', ['ABC', 'DEF'], ArrayParameterType::STRING];
         yield ['e.stringField', ['ABC', 123]]; // Doctrine infers the type from the first element and binds 123 as a string
+        yield 'float list is bound as strings' => ['e.stringField', [123.4]];
+        yield 'boolean list is bound as strings' => ['e.stringField', [true, false]];
+        yield 'enum list uses its backing type' => ['e.stringField', [TestEntityWithManyFieldTypesStringEnum::A]];
+        yield 'empty list has no binding type' => ['e.booleanField', []];
+        yield 'explicit empty list has no bound values' => ['e.stringField', [], ArrayParameterType::INTEGER];
 
         yield ['e.textField', ['ABC']];
         yield ['e.textField', ['ABC'], ArrayParameterType::STRING];
@@ -368,6 +373,7 @@ class QueryCheckerTreeWalkerTest extends TestCase
         yield ['e.stringEnumField', [TestEntityWithManyFieldTypesStringEnum::A, TestEntityWithManyFieldTypesStringEnum::B]];
         yield ['e.stringEnumField', [TestEntityWithManyFieldTypesStringEnum::A->value]];
         yield ['e.stringEnumField', [TestEntityWithManyFieldTypesStringEnum::A->value], ArrayParameterType::STRING];
+        yield 'date list checks the column binding type' => ['e.dateTimeImmutableField', ['2021-01-01'], ArrayParameterType::STRING];
 
         $simpleTestEntity = new SimpleTestEntity(1, 'x');
         yield ['e.simpleTestEntity', [$simpleTestEntity->getId()]];
@@ -387,6 +393,8 @@ class QueryCheckerTreeWalkerTest extends TestCase
         yield ['e.simpleTestEntityWithUuid', [$simpleTestEntityWithUuid]];
         yield ['sewu', [$simpleTestEntityWithUuid]];
         yield ['sewu.uuid', [$simpleTestEntityWithUuid]];
+        yield 'UUID list checks the column binding type' => ['sewu.uuid', [$simpleTestEntityWithUuid->getUuid()]];
+        yield 'entity list does not check the entity class' => ['e.simpleTestEntity', [$simpleTestEntityWithUuid]];
     }
 
     #[DataProvider('provideWrongInListParameterTypesData')]
@@ -429,11 +437,11 @@ class QueryCheckerTreeWalkerTest extends TestCase
             'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
         ];
 
-        yield [
+        yield 'entity list is converted to integer IDs' => [
             'e.stringField',
-            [123.4],
+            [new SimpleTestEntity(1, 'first')],
             null,
-            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
+            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
         ];
 
         yield [
@@ -441,13 +449,6 @@ class QueryCheckerTreeWalkerTest extends TestCase
             ['ABC'],
             ArrayParameterType::INTEGER,
             'Parameter \'e_stringField\' is using \'integer\' type in 3rd argument of setParameter(), but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
-        ];
-
-        yield [
-            'e.stringField',
-            [TestEntityWithManyFieldTypesStringEnum::A],
-            null,
-            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
         ];
 
         yield [
@@ -461,30 +462,37 @@ class QueryCheckerTreeWalkerTest extends TestCase
             'e.stringEnumField',
             [TestEntityWithManyFieldTypesIntEnum::A],
             null,
-            'Parameter \'e_stringEnumField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesIntEnum\', but it is compared with \'e.stringEnumField\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum\', \'string\'].',
+            'Parameter \'e_stringEnumField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'e.stringEnumField\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum\', \'string\'].',
         ];
 
-        yield [
-            'e.dateTimeImmutableField',
-            ['2021-01-01'],
-            ArrayParameterType::STRING,
-            'Parameter \'e_dateTimeImmutableField\' is using \'string\' type in 3rd argument of setParameter(), but it is compared with \'e.dateTimeImmutableField\' which can only be compared with \'datetime_immutable\'.',
-        ];
-
-        $simpleTestEntityWithUuid = new SimpleTestEntityWithUuid();
         yield [
             'e.simpleTestEntity',
-            [$simpleTestEntityWithUuid],
-            null,
-            'Parameter \'e_simpleTestEntity\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', but it is compared with \'e.simpleTestEntity\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity\', \'integer\'].',
+            ['1', '2'],
+            ArrayParameterType::BINARY,
+            'Parameter \'e_simpleTestEntity\' is using \'binary\' type in 3rd argument of setParameter(), but it is compared with \'e.simpleTestEntity\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity\', \'integer\'].',
         ];
 
-        yield [
+        yield 'integer list on a UUID column' => [
             'sewu.uuid',
-            [$simpleTestEntityWithUuid->getUuid()],
+            [123],
             null,
-            'Parameter \'sewu_uuid\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'string\', but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
+            'Parameter \'sewu_uuid\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
+    }
+
+    public function testListInferenceKeepsTheParameterValue(): void
+    {
+        $entities = [new SimpleTestEntity(1, 'first'), new SimpleTestEntity(2, 'second')];
+        $query = $this->getEntityManager()->createQueryBuilder()
+            ->select('e')
+            ->from(TestEntityWithManyFieldTypes::class, 'e')
+            ->andWhere('e.simpleTestEntity IN (:entities)')
+            ->setParameter('entities', $entities)
+            ->getQuery();
+
+        $query->getSQL();
+
+        self::assertSame($entities, $query->getParameter('entities')?->getValue());
     }
 
     public function testWrongScalarParameterInsideInList(): void

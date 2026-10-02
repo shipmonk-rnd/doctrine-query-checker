@@ -42,7 +42,6 @@ use function is_float;
 use function is_int;
 use function is_object;
 use function is_string;
-use function reset;
 use function sprintf;
 use function str_contains;
 use function str_starts_with;
@@ -150,8 +149,8 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         }
 
         foreach ($node->literals as $literal) {
-            if ($literal instanceof InputParameter && $this->verifyListParameterUsage($literal, listAllowed: true)) {
-                $this->verifyInputParameterType($node->expression->simpleArithmeticExpression, $literal);
+            if ($literal instanceof InputParameter) {
+                $this->verifyInputParameterType($node->expression->simpleArithmeticExpression, $literal, listAllowed: true);
             }
         }
     }
@@ -183,7 +182,6 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         if (
             $a->simpleArithmeticExpression instanceof PathExpression
             && $b->simpleArithmeticExpression instanceof InputParameter
-            && $this->verifyListParameterUsage($b->simpleArithmeticExpression, listAllowed: false)
         ) {
             $this->verifyInputParameterType($a->simpleArithmeticExpression, $b->simpleArithmeticExpression);
         }
@@ -198,15 +196,10 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
      */
     protected function verifyListParameterUsage(
         InputParameter $inputParameter,
+        Parameter $parameter,
         bool $listAllowed,
     ): bool
     {
-        $parameter = $this->_getQuery()->getParameter($inputParameter->name);
-
-        if ($parameter === null) {
-            return true; // happens when the query is analyzed by PHPStan
-        }
-
         $type = $parameter->getType();
 
         if ($type instanceof ArrayParameterType) {
@@ -258,12 +251,17 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
     protected function verifyInputParameterType(
         PathExpression $pathExpression,
         InputParameter $inputParameter,
+        bool $listAllowed = false,
     ): void
     {
         $parameter = $this->_getQuery()->getParameter($inputParameter->name);
 
         if ($parameter === null) {
             return; // happens when the query is analyzed by PHPStan
+        }
+
+        if (!$this->verifyListParameterUsage($inputParameter, $parameter, $listAllowed)) {
+            return;
         }
 
         $parameterType = $this->getParameterType($parameter);
@@ -275,6 +273,15 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         $compatibleTypes = $this->getPathExpressionCompatibleTypes($pathExpression);
         $compatibleTypes = array_map($this->normalizeType(...), $compatibleTypes);
         $compatibleTypesExtended = $compatibleTypes;
+
+        if ($parameter->getType() instanceof ArrayParameterType) {
+            // A list has a binding type, not a DBAL conversion type or an entity/enum class.
+            foreach ($compatibleTypes as $compatibleType) {
+                if (is_string($compatibleType) && Type::hasType($compatibleType)) {
+                    $compatibleTypesExtended[] = $this->normalizeType(Type::getType($compatibleType)->getBindingType());
+                }
+            }
+        }
 
         foreach ($compatibleTypes as $compatibleType) {
             foreach ($this->extendCompatibleTypes($compatibleType) as $extendedType) {
@@ -369,6 +376,10 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
 
     protected function getParameterType(Parameter $parameter): string|Type|ParameterType|ArrayParameterType|null
     {
+        if ($parameter->getValue() === [] && $parameter->getType() instanceof ArrayParameterType) {
+            return null; // Doctrine expands an empty list to NULL, with no bound values.
+        }
+
         if ($parameter->typeWasSpecified()) {
             return $this->normalizeType($parameter->getType());
         }
@@ -376,9 +387,8 @@ class QueryCheckerTreeWalker extends TreeWalkerAdapter
         $value = $parameter->getValue();
 
         if (is_array($value)) {
-            // Doctrine binds every element with the type of the first one, so we check that element.
-            // We infer its type as a scalar, which is more precise than the ArrayParameterType that Doctrine infers.
-            $value = $value === [] ? null : reset($value);
+            // Doctrine converts entities and enums before it infers the list binding type.
+            return $this->getValueType($this->_getQuery()->processParameterValue($value));
         }
 
         return $this->getValueType($value);

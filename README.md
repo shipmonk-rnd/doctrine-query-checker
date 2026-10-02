@@ -22,6 +22,14 @@ If you want to log the exceptions instead of throwing them, you can pass a logge
 QueryCheckerTreeWalker::setLogger($logger);
 ```
 
+### List parameter types
+
+For an untyped array, the checker uses Doctrine's parameter conversion and list type inference. It does not replace the array with its first element. Explicit `ArrayParameterType` values use the same compatibility check. An empty list has no values to check.
+
+List checks compare binding types, not the PHP type of an element. The checker also accepts the column's DBAL binding type. For example, Doctrine binds `[123.4]` as strings, so it passes for a string column. An enum list is checked through its backing values, and an entity list is checked through its IDs. The checker does not validate enum or entity classes within lists, or the format of string-bound date and UUID values. Scalar parameters retain the more precise enum, entity and float checks.
+
+The checker still rejects an integer-bound list for a string column, a list outside `IN (...)`, and an array bound with a scalar type. Use an explicit type for JSON and other array-valued scalar parameters.
+
 ## Installation
 
 ```bash
