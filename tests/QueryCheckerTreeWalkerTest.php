@@ -3,6 +3,8 @@
 namespace ShipMonkTests\DoctrineQueryChecker;
 
 use DateTimeImmutable;
+use Doctrine\DBAL\ArrayParameterType;
+use Doctrine\DBAL\ParameterType;
 use Doctrine\DBAL\Types\Types;
 use Doctrine\ORM\Query\Expr;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -72,6 +74,9 @@ class QueryCheckerTreeWalkerTest extends TestCase
         yield 'and' => [$expr->andX('1 = 1', $expr->eq('e.stringField', ':stringField'))];
         yield 'or' => [$expr->orX('1 = 1', $expr->eq('e.stringField', ':stringField'))];
         yield 'not' => [$expr->not($expr->eq('e.stringField', ':stringField'))];
+        yield 'in' => [$expr->in('e.stringField', ':stringField')];
+        yield 'notIn' => [$expr->notIn('e.stringField', ':stringField')];
+        yield 'in (second position)' => ["e.stringField IN ('ABC', :stringField)"];
     }
 
     #[DataProvider('provideValidParameterTypesData')]
@@ -309,6 +314,274 @@ class QueryCheckerTreeWalkerTest extends TestCase
             Types::STRING,
             'Parameter \'sewu_uuid\' is using \'string\' type in 3rd argument of setParameter(), but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
         ];
+    }
+
+    #[DataProvider('provideValidInListParameterTypesData')]
+    public function testValidInListParameterTypes(
+        string $field,
+        mixed $parameterValue,
+        ?ArrayParameterType $parameterType = null,
+    ): void
+    {
+        $parameterName = strtr($field, '.', '_');
+
+        /** @var list<TestEntityWithManyFieldTypes> $result */
+        $result = $this->getEntityManager()->createQueryBuilder()
+            ->select('e')
+            ->from(TestEntityWithManyFieldTypes::class, 'e')
+            ->leftJoin('e.simpleTestEntity', 'se')
+            ->leftJoin('e.simpleTestEntityWithUuid', 'sewu')
+            ->andWhere($this->getEntityManager()->getExpressionBuilder()->in($field, ":{$parameterName}"))
+            ->setParameter($parameterName, $parameterValue, $parameterType)
+            ->getQuery()
+            ->setQueryCache(new NullAdapter())
+            ->getResult();
+
+        self::assertSame([], $result);
+    }
+
+    /**
+     * @return iterable<array{0: string, 1: mixed, 2?: ArrayParameterType|null}>
+     */
+    public static function provideValidInListParameterTypesData(): iterable
+    {
+        yield ['e.stringField', ['ABC', 'DEF']];
+        yield ['e.stringField', ['ABC', 'DEF'], ArrayParameterType::STRING];
+        yield ['e.stringField', ['ABC', 123]]; // Doctrine infers the type from the first element and binds 123 as a string
+
+        yield ['e.textField', ['ABC']];
+        yield ['e.textField', ['ABC'], ArrayParameterType::STRING];
+
+        yield ['e.floatField', [123.4, 567.8]];
+        yield ['e.floatField', [123, 456]];
+        yield ['e.floatField', [123, 456], ArrayParameterType::INTEGER];
+
+        yield ['e.bigintField', [123, 456]];
+        yield ['e.bigintField', [123, 456], ArrayParameterType::INTEGER];
+
+        yield ['e.asciiStringField', ['ABC'], ArrayParameterType::ASCII];
+
+        yield ['e.intEnumField', [TestEntityWithManyFieldTypesIntEnum::A, TestEntityWithManyFieldTypesIntEnum::B]];
+        yield ['e.intEnumField', [TestEntityWithManyFieldTypesIntEnum::A->value]];
+        yield ['e.intEnumField', [TestEntityWithManyFieldTypesIntEnum::A->value], ArrayParameterType::INTEGER];
+
+        yield ['e.stringEnumField', [TestEntityWithManyFieldTypesStringEnum::A, TestEntityWithManyFieldTypesStringEnum::B]];
+        yield ['e.stringEnumField', [TestEntityWithManyFieldTypesStringEnum::A->value]];
+        yield ['e.stringEnumField', [TestEntityWithManyFieldTypesStringEnum::A->value], ArrayParameterType::STRING];
+
+        $simpleTestEntity = new SimpleTestEntity(1, 'x');
+        yield ['e.simpleTestEntity', [$simpleTestEntity->getId()]];
+        yield ['e.simpleTestEntity', [$simpleTestEntity->getId()], ArrayParameterType::INTEGER];
+        yield ['e.simpleTestEntity', [$simpleTestEntity]];
+
+        yield ['se', [$simpleTestEntity->getId()]];
+        yield ['se', [$simpleTestEntity]];
+
+        yield ['se.id', [$simpleTestEntity->getId()]];
+        yield ['se.id', [$simpleTestEntity]];
+
+        yield ['se.value', ['x']];
+        yield ['se.value', ['x'], ArrayParameterType::STRING];
+
+        $simpleTestEntityWithUuid = new SimpleTestEntityWithUuid();
+        yield ['e.simpleTestEntityWithUuid', [$simpleTestEntityWithUuid]];
+        yield ['sewu', [$simpleTestEntityWithUuid]];
+        yield ['sewu.uuid', [$simpleTestEntityWithUuid]];
+    }
+
+    #[DataProvider('provideWrongInListParameterTypesData')]
+    public function testWrongInListParameterTypes(
+        string $field,
+        mixed $parameterValue,
+        ?ArrayParameterType $parameterType,
+        string $exceptionMessage,
+    ): void
+    {
+        $parameterName = strtr($field, '.', '_');
+
+        self::assertException(
+            LogicException::class,
+            "QueryCheckerTreeWalker: $exceptionMessage",
+            function () use ($parameterName, $field, $parameterValue, $parameterType): void {
+                $this->getEntityManager()->createQueryBuilder()
+                    ->select('e')
+                    ->from(TestEntityWithManyFieldTypes::class, 'e')
+                    ->leftJoin('e.simpleTestEntity', 'se')
+                    ->leftJoin('e.simpleTestEntityWithUuid', 'sewu')
+                    ->andWhere($this->getEntityManager()->getExpressionBuilder()->in($field, ":{$parameterName}"))
+                    ->setParameter($parameterName, $parameterValue, $parameterType)
+                    ->getQuery()
+                    ->setQueryCache(new NullAdapter())
+                    ->getResult();
+            },
+        );
+    }
+
+    /**
+     * @return iterable<array{string, mixed, ArrayParameterType|null, string}>
+     */
+    public static function provideWrongInListParameterTypesData(): iterable
+    {
+        yield 'mixed int and string list on a string column' => [
+            'e.stringField',
+            [123, 'ABC'],
+            null,
+            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
+        ];
+
+        yield [
+            'e.stringField',
+            [123.4],
+            null,
+            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'float\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
+        ];
+
+        yield [
+            'e.stringField',
+            ['ABC'],
+            ArrayParameterType::INTEGER,
+            'Parameter \'e_stringField\' is using \'integer\' type in 3rd argument of setParameter(), but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
+        ];
+
+        yield [
+            'e.stringField',
+            [TestEntityWithManyFieldTypesStringEnum::A],
+            null,
+            'Parameter \'e_stringField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
+        ];
+
+        yield [
+            'e.booleanField',
+            ['ABC'],
+            null,
+            'Parameter \'e_booleanField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'string\', but it is compared with \'e.booleanField\' which can only be compared with \'boolean\'.',
+        ];
+
+        yield [
+            'e.stringEnumField',
+            [TestEntityWithManyFieldTypesIntEnum::A],
+            null,
+            'Parameter \'e_stringEnumField\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesIntEnum\', but it is compared with \'e.stringEnumField\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Enum\TestEntityWithManyFieldTypesStringEnum\', \'string\'].',
+        ];
+
+        yield [
+            'e.dateTimeImmutableField',
+            ['2021-01-01'],
+            ArrayParameterType::STRING,
+            'Parameter \'e_dateTimeImmutableField\' is using \'string\' type in 3rd argument of setParameter(), but it is compared with \'e.dateTimeImmutableField\' which can only be compared with \'datetime_immutable\'.',
+        ];
+
+        $simpleTestEntityWithUuid = new SimpleTestEntityWithUuid();
+        yield [
+            'e.simpleTestEntity',
+            [$simpleTestEntityWithUuid],
+            null,
+            'Parameter \'e_simpleTestEntity\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', but it is compared with \'e.simpleTestEntity\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntity\', \'integer\'].',
+        ];
+
+        yield [
+            'sewu.uuid',
+            [$simpleTestEntityWithUuid->getUuid()],
+            null,
+            'Parameter \'sewu_uuid\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'string\', but it is compared with \'sewu.uuid\' which can only be compared with one of: [\'ShipMonkTests\DoctrineQueryChecker\Fixture\Entity\SimpleTestEntityWithUuid\', \'uuid\'].',
+        ];
+    }
+
+    public function testWrongScalarParameterInsideInList(): void
+    {
+        self::assertException(
+            LogicException::class,
+            'QueryCheckerTreeWalker: Parameter \'second\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'e.stringField\' which can only be compared with \'string\'.',
+            function (): void {
+                $this->getEntityManager()->createQueryBuilder()
+                    ->select('e')
+                    ->from(TestEntityWithManyFieldTypes::class, 'e')
+                    ->andWhere('e.stringField NOT IN (:first, :second)')
+                    ->setParameter('first', 'ABC')
+                    ->setParameter('second', 123)
+                    ->getQuery()
+                    ->setQueryCache(new NullAdapter())
+                    ->getResult();
+            },
+        );
+    }
+
+    public function testWrongParameterTypeInsideInSubselect(): void
+    {
+        self::assertException(
+            LogicException::class,
+            'QueryCheckerTreeWalker: Parameter \'value\' has no type specified in 3rd argument of setParameter(). Thus it is inferred as \'integer\', but it is compared with \'s.value\' which can only be compared with \'string\'.',
+            function (): void {
+                $this->getEntityManager()->createQueryBuilder()
+                    ->select('e')
+                    ->from(TestEntityWithManyFieldTypes::class, 'e')
+                    ->andWhere('e.simpleTestEntity IN (SELECT s.id FROM ' . SimpleTestEntity::class . ' s WHERE s.value = :value)')
+                    ->setParameter('value', 123)
+                    ->getQuery()
+                    ->setQueryCache(new NullAdapter())
+                    ->getResult();
+            },
+        );
+    }
+
+    #[DataProvider('provideWrongListParameterUsageData')]
+    public function testWrongListParameterUsage(
+        string $condition,
+        mixed $parameterValue,
+        ArrayParameterType|ParameterType|string|null $parameterType,
+        string $exceptionMessage,
+    ): void
+    {
+        self::assertException(
+            LogicException::class,
+            "QueryCheckerTreeWalker: $exceptionMessage",
+            function () use ($condition, $parameterValue, $parameterType): void {
+                $this->getEntityManager()->createQueryBuilder()
+                    ->select('e')
+                    ->from(TestEntityWithManyFieldTypes::class, 'e')
+                    ->andWhere($condition)
+                    ->setParameter('param', $parameterValue, $parameterType)
+                    ->getQuery()
+                    ->setQueryCache(new NullAdapter())
+                    ->getResult();
+            },
+        );
+    }
+
+    /**
+     * @return iterable<string, array{string, mixed, ArrayParameterType|ParameterType|string|null, string}>
+     */
+    public static function provideWrongListParameterUsageData(): iterable
+    {
+        $inferredListOutsideIn = 'Parameter \'param\' has an array value and no type specified in 3rd argument of setParameter(). Thus it is inferred as a list, but it is used outside of IN (...). Doctrine expands a list to one placeholder for each element, which is valid only inside IN (...).';
+        $explicitListOutsideIn = 'Parameter \'param\' is using ArrayParameterType in 3rd argument of setParameter(), but it is used outside of IN (...). Doctrine expands a list to one placeholder for each element, which is valid only inside IN (...).';
+        $arrayWithScalarType = 'Parameter \'param\' has an array value, but it is using \'integer\' type in 3rd argument of setParameter(). Doctrine binds the whole array as one \'integer\' value. Use ArrayParameterType to pass a list.';
+
+        yield 'one-element list in comparison' => ['e.id = :param', [1], null, $inferredListOutsideIn];
+        yield 'list in comparison' => ['e.id = :param', [1, 2], null, $inferredListOutsideIn];
+        yield 'list in comparison (left side)' => [':param <> e.id', [1, 2], null, $inferredListOutsideIn];
+        yield 'untyped array compared with json field' => ['e.jsonField = :param', ['a' => 1], null, $inferredListOutsideIn];
+        yield 'explicit list in comparison' => ['e.id = :param', [1], ArrayParameterType::INTEGER, $explicitListOutsideIn];
+
+        yield 'array with Types::INTEGER in IN' => ['e.id IN (:param)', [1, 2], Types::INTEGER, $arrayWithScalarType];
+        yield 'array with ParameterType::INTEGER in IN' => ['e.id IN (:param)', [1, 2], ParameterType::INTEGER, $arrayWithScalarType];
+        yield 'array with Types::BIGINT in IN' => ['e.bigintField IN (:param)', [1, 2], Types::BIGINT, $arrayWithScalarType];
+        yield 'array with Types::INTEGER in comparison' => ['e.id = :param', [1], Types::INTEGER, $arrayWithScalarType];
+    }
+
+    public function testArrayValueWithArrayAcceptingTypeInsideInList(): void
+    {
+        $result = $this->getEntityManager()->createQueryBuilder()
+            ->select('e')
+            ->from(TestEntityWithManyFieldTypes::class, 'e')
+            ->andWhere('e.jsonField IN (:first, :second)')
+            ->setParameter('first', ['a' => 1], Types::JSON)
+            ->setParameter('second', ['a' => 2], Types::JSON)
+            ->getQuery()
+            ->setQueryCache(new NullAdapter())
+            ->getResult();
+
+        self::assertSame([], $result);
     }
 
     public function testWillUseLoggerIfAvailable(): void
