@@ -16,6 +16,8 @@ use PHPUnit\Framework\TestCase as PhpUnitTestCase;
 use Ramsey\Uuid\Doctrine\UuidType;
 use ShipMonk\DoctrineQueryChecker\QueryCheckerTreeWalker;
 use Throwable;
+use function method_exists;
+use const PHP_VERSION_ID;
 
 abstract class TestCase extends PhpUnitTestCase
 {
@@ -73,6 +75,11 @@ abstract class TestCase extends PhpUnitTestCase
 
         $config = ORMSetup::createAttributeMetadataConfiguration([__DIR__ . '/../Fixture'], isDevMode: true, proxyDir: __DIR__ . '/../../cache/proxies');
         $config->setNamingStrategy(new UnderscoreNamingStrategy());
+
+        if (PHP_VERSION_ID >= 8_04_00 && method_exists($config, 'enableNativeLazyObjects')) { // @phpstan-ignore function.alreadyNarrowedType (not available in older ORM versions)
+            $config->enableNativeLazyObjects(true);
+        }
+
         $config->setDefaultQueryHint(Query::HINT_CUSTOM_TREE_WALKERS, [QueryCheckerTreeWalker::class]);
 
         $connection = DriverManager::getConnection(['driver' => 'pdo_sqlite', 'memory' => true], $config);
